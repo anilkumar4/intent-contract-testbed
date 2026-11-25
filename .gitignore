@@ -1,0 +1,4 @@
+.vscode-test/
+upstream-extension/
+node_modules/
+*.vsix

@@ -1,0 +1,126 @@
+name: Intent Contract Testbed CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: intent-contract-testbed-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Extension checks (${{ matrix.os }}, Node ${{ matrix.node-version }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+        node-version:
+          - 22.x
+          - 24.x
+
+    steps:
+      - name: Check out testbed
+        uses: actions/checkout@v4
+
+      - name: Check out Intent Contract extension source
+        uses: actions/checkout@v4
+        with:
+          repository: anilkumar4/intent-contract-vs-ext
+          ref: master
+          path: upstream-extension
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+          cache-dependency-path: upstream-extension/package-lock.json
+
+      - name: Install extension dependencies
+        working-directory: upstream-extension
+        run: npm ci
+
+      - name: Configure Git identity for integration tests
+        run: |
+          git config --global user.name "Intent Contract Testbed CI"
+          git config --global user.email "intent-contract-testbed@example.invalid"
+
+      - name: Type-check extension
+        working-directory: upstream-extension
+        run: npm run typecheck
+
+      - name: Run extension unit and integration tests
+        working-directory: upstream-extension
+        run: npm test
+
+      - name: Compile extension, CLI, and MCP bundles
+        working-directory: upstream-extension
+        run: npm run compile
+
+      - name: Run sample workspace tests
+        working-directory: test-workspace
+        run: npm test
+
+      - name: Run black-box policy scenarios through the compiled CLI
+        run: node scripts/run-policy-scenarios.mjs upstream-extension/dist/cli.js
+
+  extension-host:
+    name: VS Code extension-host coverage and VSIX packaging
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    needs: quality
+
+    steps:
+      - name: Check out testbed
+        uses: actions/checkout@v4
+
+      - name: Check out Intent Contract extension source
+        uses: actions/checkout@v4
+        with:
+          repository: anilkumar4/intent-contract-vs-ext
+          ref: master
+          path: upstream-extension
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+          cache-dependency-path: upstream-extension/package-lock.json
+
+      - name: Install extension dependencies
+        working-directory: upstream-extension
+        run: npm ci
+
+      - name: Compile extension
+        working-directory: upstream-extension
+        run: npm run compile
+
+      - name: Run upstream VS Code smoke tests
+        working-directory: upstream-extension
+        run: xvfb-run -a npm run test:smoke
+
+      - name: Run testbed extension-host command coverage
+        run: xvfb-run -a node scripts/run-extension-host.mjs upstream-extension
+
+      - name: Package extension VSIX
+        working-directory: upstream-extension
+        run: npx vsce package --allow-missing-repository --out intent-contract-testbed.vsix
+
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: intent-contract-vsix
+          path: upstream-extension/intent-contract-testbed.vsix
+          if-no-files-found: error
+          retention-days: 14

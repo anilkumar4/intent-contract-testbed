@@ -1,0 +1,4 @@
+name: Approved fixture workflow
+
+on:
+  workflow_dispatch:

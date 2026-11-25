@@ -1,0 +1,54 @@
+name: intent-contract-extension-testbed
+intent: >-
+  Exercise Intent Contract's scope, symbol scope, architecture, dependency,
+  test-integrity, and high-risk file policies in an isolated sample workspace.
+
+scope:
+  modify:
+    - "src/**"
+    - "test/**"
+  read_only:
+    - ".intent/**"
+    - ".github/**"
+    - ".vscode/**"
+    - "docs/architecture.mmd"
+    - "package.json"
+    - "package-lock.json"
+    - "tsconfig.json"
+  modify_symbols:
+    - "runIntentChecks"
+    - "evaluateIntent"
+    - "hasRequiredIntent"
+
+architecture:
+  diagram: "docs/architecture.mmd"
+  node_mappings:
+    Extension:
+      - "src/extension.js"
+    Contract:
+      - "src/contract.js"
+    Detectors:
+      - "src/detectors.js"
+    Tests:
+      - "test/**"
+  default_policy: "deny_unlisted_edges"
+
+high_risk:
+  include:
+    - ".github/workflows/**"
+    - "package.json"
+    - "package-lock.json"
+    - "tsconfig.json"
+    - ".vscode/**"
+    - "**/.env*"
+    - "**/Dockerfile*"
+  exclude:
+    - ".github/workflows/approved.yml"
+
+forbid:
+  - new_dependencies
+  - test_weakening
+  - high_risk_files
+  - architecture_drift
+
+allow_exceptions: false

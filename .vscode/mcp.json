@@ -1,0 +1,15 @@
+{
+  "servers": {
+    "intent-contract": {
+      "command": "C:\\Users\\ANIL\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe",
+      "args": [
+        "c:\\Users\\ANIL\\.vscode\\extensions\\anilkumar4.intent-contract\\dist\\mcp-server.js",
+        "--workspace",
+        "C:/Users/ANIL/Downloads/Codex-Play/Intent-Contract-Extension-Testbed"
+      ],
+      "env": {
+        "ELECTRON_RUN_AS_NODE": "1"
+      }
+    }
+  }
+}

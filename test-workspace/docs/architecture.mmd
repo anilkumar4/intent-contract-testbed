@@ -2,6 +2,10 @@ flowchart LR
   Extension --> Contract
   Extension --> Detectors
   Detectors --> Contract
+  Orders --> Pricing
+  Tests --> Orders
+  Tests --> Pricing
+  Detectors --> Contract
   Tests --> Extension
   Tests --> Contract
   Tests --> Detectors

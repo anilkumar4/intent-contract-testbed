@@ -2,3 +2,8 @@ name: Fixture CI
 
 on:
   push:
+jobs:
+  fixture:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Fixture workflow used by Intent Contract high-risk checks."

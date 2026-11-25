@@ -22,12 +22,20 @@ const scenarios = [
     name: "permitted symbol edit passes",
     expected: [],
     change: async (root) => {
-      const file = path.join(root, "src", "extension.js");
-      const source = await fs.readFile(file, "utf8");
-      await fs.writeFile(file, source.replace(
-        "return evaluateIntent(contract);",
-        "return evaluateIntent({ ...contract, description: contract.description.trim() });"
-      ));
+      await replaceOnce(root, "src/extension.js",
+        "return hasRequiredIntent(contract) ? [] : evaluateIntent(contract);",
+        "if (hasRequiredIntent(contract)) return [];\n  return evaluateIntent(contract);"
+      );
+    }
+  },
+  {
+    name: "permitted module dependency remains valid",
+    expected: [],
+    change: async (root) => {
+      await replaceOnce(root, "src/orders.js",
+        "totalCents: applyDiscount(subtotalCents, discountPercent)",
+        "totalCents: applyDiscount(subtotalCents, (discountPercent))"
+      );
     }
   },
   {
@@ -86,18 +94,19 @@ const scenarios = [
     name: "test matcher downgrade is reported",
     expected: ["test_weakening"],
     change: async (root) => {
-      const file = path.join(root, "test", "contract.test.js");
-      const source = await fs.readFile(file, "utf8");
-      await fs.writeFile(file, source.replace(".toEqual([])", ".toBeTruthy()"));
+      await replaceOnce(root, "test/contract.test.js", ".toEqual([])", ".toBeTruthy()");
     }
   },
   {
     name: "assertion-free test is reported",
     expected: ["tautological_tests"],
     change: async (root) => {
-      const file = path.join(root, "test", "contract.test.js");
-      const source = await fs.readFile(file, "utf8");
-      await fs.writeFile(file, source.replace("expect(runIntentChecks(contract)).toEqual([]);", "runIntentChecks(contract);"));
+      await replaceOnce(
+        root,
+        "test/contract.test.js",
+        "expect(runIntentChecks(contract)).toEqual([]);",
+        "runIntentChecks(contract);"
+      );
     }
   },
   {
@@ -163,4 +172,12 @@ function git(cwd, args) {
   if (result.status !== 0) {
     throw new Error(`git ${args.join(" ")} failed: ${result.stderr || result.stdout}`);
   }
+}
+
+async function replaceOnce(root, relativePath, before, after) {
+  const file = path.join(root, ...relativePath.split("/"));
+  const source = await fs.readFile(file, "utf8");
+  const occurrences = source.split(before).length - 1;
+  assert.equal(occurrences, 1, `Expected exactly one mutation target in ${relativePath}, found ${occurrences}.`);
+  await fs.writeFile(file, source.replace(before, after));
 }

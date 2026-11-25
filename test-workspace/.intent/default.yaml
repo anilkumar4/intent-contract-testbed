@@ -1,7 +1,7 @@
 name: intent-contract-extension-testbed
 intent: >-
-  Exercise Intent Contract's scope, symbol scope, architecture, dependency,
-  test-integrity, and high-risk file policies in an isolated sample workspace.
+  Maintain the order-pricing example while exercising Intent Contract's scope,
+  architecture, dependency, test-integrity, and high-risk file policies.
 
 scope:
   modify:
@@ -19,6 +19,9 @@ scope:
     - "runIntentChecks"
     - "evaluateIntent"
     - "hasRequiredIntent"
+    - "calculateSubtotal"
+    - "applyDiscount"
+    - "createOrder"
 
 architecture:
   diagram: "docs/architecture.mmd"
@@ -29,6 +32,10 @@ architecture:
       - "src/contract.js"
     Detectors:
       - "src/detectors.js"
+    Pricing:
+      - "src/pricing.js"
+    Orders:
+      - "src/orders.js"
     Tests:
       - "test/**"
   default_policy: "deny_unlisted_edges"

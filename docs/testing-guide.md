@@ -54,7 +54,7 @@ In the Extension Development Host:
 4. Run **Intent Contract: Re-check Now**, or save the file and let automatic checking run.
 5. Inspect editor diagnostics and the **Intent Contract Findings** view in the activity bar.
 
-The test contract allows edits under `src/**` and `test/**`, and only allows these named symbols: `runIntentChecks`, `evaluateIntent`, and `hasRequiredIntent`. It treats the contract, architecture diagram, package metadata, and `.github` files as read-only.
+The fixture includes an order-pricing flow across `src/orders.js` and `src/pricing.js`, with behavior tests in `test/orders.test.js`. The test contract allows edits under `src/**` and `test/**`, and constrains named symbols; `calculateTax` is intentionally not allowed initially so you can test the Add Symbol to Scope workflow. It treats the contract, architecture diagram, package metadata, and `.github` files as read-only.
 
 ## Where findings and generated files go
 
@@ -76,7 +76,10 @@ Start each scenario from a clean baseline, or restore the temporary workspace be
 
 | Change in the temporary workspace | Expected result |
 |---|---|
-| Change an allowed function in `src/extension.js` | No scope or symbol-scope finding. |
+| Change an allowed function in `src/orders.js` or `src/extension.js` | No scope or symbol-scope finding. |
+| Change `calculateTax` in `src/orders.js` from an 8% to a 9% calculation | `symbol_scope` finding; use **Add Symbol to Scope** to approve it and update the active baseline. |
+| Keep the `Orders --> Pricing` dependency in `orders.js` | The architecture edge is permitted. |
+| Add an import from `src/pricing.js` to `src/orders.js` | `architecture_drift` finding: this reverses the approved dependency direction. |
 | Add `notes.md` at the workspace root | `scope` warning: outside `scope.modify`. |
 | Edit `docs/architecture.mmd` or `.intent/default.yaml` | `scope` error: read-only/policy integrity violation. |
 | Add an unlisted function to `src/extension.js` | `symbol_scope` finding. |
@@ -88,6 +91,20 @@ Start each scenario from a clean baseline, or restore the temporary workspace be
 | Edit `.github/workflows/approved.yml` | Scope finding, but no high-risk finding because the policy explicitly excludes this path. |
 
 Findings can be checked in the editor, the Findings view, and `.intent/.violations.md`. The message text and severity are more useful than expecting one finding per changed file: a single change can trigger multiple detectors.
+
+To exercise the extension's scope actions, add `notes.md`, run **Intent Contract: Re-check Now**, and use the diagnostic quick fix or **Add File to Active Scope (Modify)**. Then choose **Mark File as Read-Only** and re-check. The testbed's extension-host suite covers this active-baseline synchronization without changing your checkout.
+
+### Interactive flows to verify before release
+
+The host suite opens webviews and checks their commands, but does not automate every interactive prompt or button. In a disposable Git workspace, also verify:
+
+1. **Template and Visual Contract Builder:** create a contract in an empty `.intent/`; confirm a second create does not overwrite it; create another contract with the builder, inspect its YAML, and start it.
+2. **Dashboard and Architecture Inspector:** inspect scorecards/findings, re-check, copy corrective prompts, revert out-of-scope files, inspect architecture edges, jump to source lines, update scope, and open the policy diagram.
+3. **Finding actions:** open a finding diff, revert both a changed tracked file and an added file (including the confirmation), and verify the working tree matches the baseline.
+4. **Waivers:** with `allow_exceptions: true`, choose a reason, enter a non-empty justification, select a TTL, and verify the finding is grouped as waived and saved in `.intent/waivers.json`. Repeat with exceptions disabled and confirm it is refused.
+5. **Agent setup and hooks:** configure only the Antigravity integration and inspect the generated `.agents/` files; use the extension UI to install pre-commit/pre-push hooks in a disposable repository. Upstream integration tests execute the hooks against a local bare remote and verify violating commits/pushes are blocked. Never use a real remote for this test.
+6. **Status bar, walkthrough, and guide:** open each entry point and verify its navigation/actions; use **Report an Issue** only to inspect the prepared URL—do not submit it.
+7. **MCP tools:** connect a local MCP client using the generated configuration and exercise contract retrieval, verification, remediation, reversion, self-healing, and session start against the disposable workspace.
 
 ## Run automated tests locally
 
@@ -117,7 +134,7 @@ node .\scripts\run-policy-scenarios.mjs ..\intent-contract-vs-ext\dist\cli.js
 node .\scripts\run-extension-host.mjs ..\intent-contract-vs-ext
 ```
 
-The policy scenario runner creates and deletes disposable Git repositories under the system temporary directory. It verifies clean and allowed changes, every contract detector, custom high-risk include/exclude behavior, policy tampering, and invalid contracts through the compiled CLI. The extension-host runner copies the sample workspace to a temporary Git repository and checks activation plus every contributed command, the walkthrough, and the activity-bar container.
+The policy scenario runner creates and deletes disposable Git repositories under the system temporary directory. It verifies clean and allowed changes, every contract detector, custom high-risk include/exclude behavior, policy tampering, and invalid contracts through the compiled CLI. The extension-host runner copies the sample workspace to a temporary Git repository and exercises session start/re-check/stop and restoration after reopening VS Code, automatic checks, ignored paths, severity overrides, findings/diagnostics, CodeLens, quick fixes, scope synchronization, clipboard/report/architecture exports, webview opening, and generated-file cleanup.
 
 The GitHub Actions workflow runs the extension typecheck, unit/integration suite, compile, sample tests, and policy scenarios on Linux, Windows, and macOS with Node.js 22 and 24. A dependent Linux job runs both extension-host smoke suites and packages a VSIX artifact.
 
@@ -125,16 +142,32 @@ The GitHub Actions workflow runs the extension typecheck, unit/integration suite
 
 | Feature area | Automated coverage |
 |---|---|
-| Contract parsing, validation, and template creation | `test/contract.test.ts` in the extension repository; invalid-policy CLI scenario in this testbed |
-| Scope, read-only policy, symbol scope, dependencies, high-risk files, test weakening, tautologies, architecture drift | Extension tests under `test/detectors/`; black-box scenarios in `scripts/run-policy-scenarios.mjs` |
-| Git snapshots, staged/index checks, revision checks, and revert behavior | Extension tests under `test/git/` and `test/cli/` |
-| CLI, compliance reports, and CI output | Extension tests under `test/cli/` and `test/state/` |
-| MCP protocol and tools | Extension tests under `test/mcp/` |
-| Agent configuration, synchronization, and Git hooks | Extension tests under `test/config/` |
-| Waivers, report generation, and UI helper regressions | Extension tests under `test/state/` and `test/ui/` |
-| Extension activation, contributed commands, walkthrough, and activity-bar container | Upstream smoke test plus `test-extension-host/suite.cjs` |
+| Contract parsing, validation, template creation | Extension tests in `test/contract.test.ts`; invalid-policy CLI scenario. Interactive builder flows remain manual. |
+| Scope, symbols, dependencies, high-risk paths, test weakening, tautologies, architecture | Extension tests under `test/detectors/`; black-box CLI scenarios; realistic order-pricing fixture. |
+| Language and manifest variants | Upstream detector fixtures cover Python/Go/Java/Kotlin/C# architecture imports, JavaScript/Python/Go/Java test weakening, and Node/Python/Go/Rust/Java/.NET/Ruby dependency manifests; the executable testbed app itself is JavaScript. |
+| Session lifecycle and generated findings file | VS Code host suites start, check, stop, and restore a contract across host runs; assert `.intent/.state.json` and `.intent/.violations.md` creation/removal. |
+| Automatic checking, ignored paths, severity overrides, diagnostics | VS Code host suite verifies actual workspace behavior; upstream detector tests cover rule results. |
+| CodeLens, quick fixes, add-file/add-symbol/read-only scope actions | VS Code host suite; UI helper regression tests under upstream `test/ui/`. |
+| Compliance report and architecture export | VS Code host suite asserts report contents and renderable Mermaid output; upstream report tests. |
+| Git snapshots, staged/index checks, revisions, revert, and hooks | Extension integration tests under `test/git/`, `test/cli/`, and `test/config/`. |
+| MCP protocol/tools and agent configuration/synchronization | Extension tests under `test/mcp/` and `test/config/`. |
+| Waivers and finding UI helpers | Extension tests under `test/state/` and `test/ui/`; the interactive justification/TTL prompts remain manual. |
+| Extension activation, command contributions, walkthrough, activity bar | Upstream smoke test and testbed extension-host suite. |
+| Dashboard, Visual Builder, Architecture Inspector | Testbed host confirms each webview opens; interactive webview message/button flows remain manual. |
 
-The extension-host checks verify activation and contribution registration; they do not simulate every click path through interactive webviews. The suite is feature-focused and does not claim 100% statement/branch coverage.
+### Command-by-command status
+
+| Commands | Automated coverage and remaining manual checks |
+|---|---|
+| `start`, `recheck`, `stop` | Host E2E verifies baseline/session state, clean and violating checks, findings output, and stop cleanup. |
+| `copyViolations`, `exportReport`, `exportArchitectureDrift` | Host E2E verifies clipboard text and generated report/diagram contents. |
+| `addFileToScope`, `addSymbolToScope`, `markFileReadOnly` | Host E2E verifies each command updates the active policy baseline and findings. |
+| `openDashboard`, `visualBuilder`, `visualizeArchitecture` | Host E2E verifies the webview panels open; their interactive controls still need manual verification. |
+| `createTemplate`, `openDiff`, `openGuide`, `openWalkthrough`, `revertFile`, `waiveFinding`, `configureAgents`, `reportIssue`, `statusClick` | Registration is asserted in the host. Related contract, Git, waiver, and agent logic has upstream tests where applicable; prompt-driven flows, confirmation dialogs, external issue opening, and the status HUD remain manual. |
+
+The CI matrix runs the extension's typecheck, unit/integration tests, compile, sample tests, and CLI scenarios on Linux, Windows, and macOS with Node.js 22 and 24. VS Code-host and VSIX packaging checks run on Linux with Node.js 22.
+
+The host suite verifies real extension state and generated outputs but does not simulate every UI prompt, waiver TTL choice, webview button, or real Git pre-commit/pre-push invocation. Those flows have upstream unit/integration coverage where available and should be manually exercised before a release. This is broad feature-focused coverage, not 100% statement/branch coverage or a guarantee that no future review could identify additional cases.
 
 ## Troubleshooting
 

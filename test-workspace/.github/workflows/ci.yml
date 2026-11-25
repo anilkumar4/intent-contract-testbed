@@ -1,6 +1,6 @@
 name: Fixture CI
 
-on:
+"on":
   push:
 jobs:
   fixture:

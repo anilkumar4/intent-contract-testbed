@@ -1,6 +1,6 @@
 name: Approved fixture workflow
 
-on:
+"on":
   workflow_dispatch:
 jobs:
   fixture:

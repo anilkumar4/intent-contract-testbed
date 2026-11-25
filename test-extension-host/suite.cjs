@@ -168,21 +168,11 @@ exports.run = async function runExtensionHostCoverage() {
   );
   const symbolDiagnostic = vscode.languages.getDiagnostics(ordersUri)
     .find((diagnostic) => /symbol/i.test(diagnostic.message));
-  const orderLines = orderSource.split(/\r?\n/);
-  const taxDeclarationLine = orderLines.findIndex((line) => line.includes("function calculateTax"));
-  assert.ok(taxDeclarationLine >= 0, "The changed tax symbol should have a source declaration.");
-  const taxDeclarationColumn = orderLines[taxDeclarationLine].indexOf("calculateTax");
-  assert.ok(taxDeclarationColumn >= 0, "The changed tax symbol should have a named declaration.");
-  const symbolActionRange = new vscode.Range(
-    taxDeclarationLine,
-    taxDeclarationColumn,
-    symbolDiagnostic.range.end.line,
-    symbolDiagnostic.range.end.character
-  );
+  assert.ok(symbolDiagnostic, "Expected a symbol_scope diagnostic on src/orders.js.");
   const symbolActions = await vscode.commands.executeCommand(
     "vscode.executeCodeActionProvider",
     ordersUri,
-    symbolActionRange,
+    symbolDiagnostic.range,
     vscode.CodeActionKind.QuickFix.value
   );
   const addSymbolAction = symbolActions.find((action) =>

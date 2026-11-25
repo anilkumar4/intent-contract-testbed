@@ -21,3 +21,5 @@ Push this folder as its own GitHub repository, or copy it into a new repository,
 Run `npm test` from `test-workspace/` to verify its example behavior. Open `test-workspace/` in VS Code with Intent Contract installed. The `.intent/default.yaml` policy restricts changes to `src/**` and `test/**`; keep the architecture diagram, contract, and project configuration read-only.
 
 The architecture map is deliberately small and explicit. Add edges to `docs/architecture.mmd` only when the project owner approves the dependency, then capture a fresh contract baseline before checking changes.
+
+See the [testing and run guide](docs/testing-guide.md) for VS Code Extension Development Host setup, manual feature scenarios, automated test commands, and generated-file locations. Findings are written to `.intent/.violations.md` under the opened test workspace.

@@ -13,13 +13,28 @@ if (!extensionRoot) {
   throw new Error("Usage: node scripts/run-extension-host.mjs <path-to-extension-checkout>");
 }
 
+// Clear ELECTRON_RUN_AS_NODE if inherited from an Electron-hosted terminal (e.g. VS Code / Antigravity)
+// so @vscode/test-electron launches Code as VS Code rather than plain Node.js.
+delete process.env.ELECTRON_RUN_AS_NODE;
+
 const requireFromExtension = createRequire(path.join(extensionRoot, "package.json"));
 const { runTests } = requireFromExtension("@vscode/test-electron");
 const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "intent-contract-extension-host-"));
 const fixture = path.join(projectRoot, "test-workspace");
+const generatedIntentEntries = new Set([".state.json", ".violations.md", "waivers.json", ".architecture-drift.mmd", "reports"]);
 
 try {
-  await fs.cp(fixture, workspace, { recursive: true });
+  await fs.cp(fixture, workspace, {
+    recursive: true,
+    filter: (sourcePath) => {
+      const rel = path.relative(fixture, sourcePath).replace(/\\/g, "/");
+      if (rel.startsWith(".intent/")) {
+        const entry = rel.slice(".intent/".length).split("/")[0];
+        if (generatedIntentEntries.has(entry)) return false;
+      }
+      return true;
+    }
+  });
   const settingsDirectory = path.join(workspace, ".vscode");
   await fs.mkdir(settingsDirectory, { recursive: true });
   await fs.writeFile(path.join(settingsDirectory, "settings.json"), `${JSON.stringify({

@@ -131,29 +131,30 @@ Set-Location .\test-workspace
 npm test
 Set-Location ..
 node .\scripts\run-policy-scenarios.mjs ..\intent-contract-vs-ext\dist\cli.js
+node .\scripts\run-mcp-scenarios.mjs ..\intent-contract-vs-ext\dist\mcp-server.js
 node .\scripts\run-extension-host.mjs ..\intent-contract-vs-ext
 ```
 
-The policy scenario runner creates and deletes disposable Git repositories under the system temporary directory. It verifies clean and allowed changes, every contract detector, custom high-risk include/exclude behavior, policy tampering, and invalid contracts through the compiled CLI. The extension-host runner copies the sample workspace to a temporary Git repository and exercises session start/re-check/stop and restoration after reopening VS Code, automatic checks, ignored paths, severity overrides, findings/diagnostics, CodeLens, quick fixes, scope synchronization, clipboard/report/architecture exports, webview opening, and generated-file cleanup.
+The policy scenario runner creates and deletes disposable Git repositories under the system temporary directory. It verifies clean and allowed changes (with strict zero-finding checks), every contract detector, test-weakening variants (matcher downgrade, skipped tests, deleted test blocks, trivial assertions), reversed architecture edges, custom high-risk include/exclude behavior, policy tampering, waivers (`allow_exceptions: true` with active/expired TTLs and `allow_exceptions: false`), invalid contracts, CLI session subcommands (`start`, `check --index`, `check --revision`, `check --format github`, `revert`, `report --badge --pr-comment`, `stop`), and live Git `pre-commit` hook blocking through the compiled CLI. The MCP scenario runner exercises `dist/mcp-server.js` over stdio JSON-RPC (`initialize`, `tools/list`, `start_intent_contract`, `get_active_contract`, `verify_intent_contract`, `get_remediation_instructions`, `revert_out_of_scope_files`, and `self_heal_contract`). The extension-host runner copies the sample workspace to a temporary Git repository and exercises session start/re-check/stop and restoration after reopening VS Code, automatic checks, ignored paths, severity overrides, findings/diagnostics, CodeLens, quick fixes, scope synchronization, template preservation, diff viewing, clipboard/report/architecture exports, webview content, and generated-file cleanup.
 
-The GitHub Actions workflow runs the extension typecheck, unit/integration suite, compile, sample tests, and policy scenarios on Linux, Windows, and macOS with Node.js 22 and 24. A dependent Linux job runs both extension-host smoke suites and packages a VSIX artifact.
+The GitHub Actions workflow runs the extension typecheck, unit/integration suite, compile, sample tests, policy/CLI scenarios, and MCP scenarios on Linux, Windows, and macOS with Node.js 22 and 24. A dependent Linux job runs both extension-host smoke suites and packages a VSIX artifact.
 
 ## Test coverage map
 
 | Feature area | Automated coverage |
 |---|---|
-| Contract parsing, validation, template creation | Extension tests in `test/contract.test.ts`; invalid-policy CLI scenario. Interactive builder flows remain manual. |
-| Scope, symbols, dependencies, high-risk paths, test weakening, tautologies, architecture | Extension tests under `test/detectors/`; black-box CLI scenarios; realistic order-pricing fixture. |
+| Contract parsing, validation, template creation | Extension tests in `test/contract.test.ts`; invalid-policy CLI scenario; host `createTemplate` non-overwrite check. Interactive builder flows remain manual. |
+| Scope, symbols, dependencies, high-risk paths, test weakening, tautologies, architecture | Extension tests under `test/detectors/`; black-box CLI scenarios (including reversed edges, skipped/deleted/trivial tests); realistic order-pricing fixture. |
 | Language and manifest variants | Upstream detector fixtures cover Python/Go/Java/Kotlin/C# architecture imports, JavaScript/Python/Go/Java test weakening, and Node/Python/Go/Rust/Java/.NET/Ruby dependency manifests; the executable testbed app itself is JavaScript. |
-| Session lifecycle and generated findings file | VS Code host suites start, check, stop, and restore a contract across host runs; assert `.intent/.state.json` and `.intent/.violations.md` creation/removal. |
+| Session lifecycle and generated findings file | VS Code host suites start, check, stop, and restore a contract across host runs; assert `.intent/.state.json` and `.intent/.violations.md` creation/removal; CLI lifecycle scenario covers `start`/`check`/`stop`. |
 | Automatic checking, ignored paths, severity overrides, diagnostics | VS Code host suite verifies actual workspace behavior; upstream detector tests cover rule results. |
-| CodeLens, quick fixes, add-file/add-symbol/read-only scope actions | VS Code host suite; UI helper regression tests under upstream `test/ui/`. |
-| Compliance report and architecture export | VS Code host suite asserts report contents and renderable Mermaid output; upstream report tests. |
-| Git snapshots, staged/index checks, revisions, revert, and hooks | Extension integration tests under `test/git/`, `test/cli/`, and `test/config/`. |
-| MCP protocol/tools and agent configuration/synchronization | Extension tests under `test/mcp/` and `test/config/`. |
-| Waivers and finding UI helpers | Extension tests under `test/state/` and `test/ui/`; the interactive justification/TTL prompts remain manual. |
+| CodeLens, quick fixes, add-file/add-symbol/read-only scope actions | VS Code host suite (including `read_only` YAML sync and CodeLens transition); UI helper regression tests under upstream `test/ui/`. |
+| Compliance report and architecture export | VS Code host suite asserts report contents and renderable Mermaid output; CLI `report` scenario verifies `--output`, `--badge`, and `--pr-comment`. |
+| Git snapshots, staged/index checks, revisions, revert, and hooks | Extension integration tests under `test/git/`, `test/cli/`, and `test/config/`; testbed CLI scenarios exercise `--index`, `--revision`, `revert`, and `hook install` pre-commit blocking. |
+| MCP protocol/tools and agent configuration/synchronization | Extension tests under `test/mcp/` and `test/config/`; testbed `run-mcp-scenarios.mjs` exercises live stdio JSON-RPC against `test-workspace`. |
+| Waivers and finding UI helpers | Extension tests under `test/state/` and `test/ui/`; testbed CLI scenarios verify active, expired, and `allow_exceptions: false` waivers. Interactive justification/TTL prompts remain manual. |
 | Extension activation, command contributions, walkthrough, activity bar | Upstream smoke test and testbed extension-host suite. |
-| Dashboard, Visual Builder, Architecture Inspector | Testbed host confirms each webview opens; interactive webview message/button flows remain manual. |
+| Dashboard, Visual Builder, Architecture Inspector | Testbed host verifies each webview opens and renders contract/diagram/finding content; interactive webview message/button flows remain manual. |
 
 ### Command-by-command status
 

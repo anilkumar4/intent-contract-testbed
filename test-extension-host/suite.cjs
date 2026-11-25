@@ -44,6 +44,11 @@ exports.run = async function runExtensionHostCoverage() {
   const folder = vscode.workspace.workspaceFolders?.[0];
   assert.ok(folder, "The extension host must open the isolated fixture workspace.");
   const root = folder.uri.fsPath;
+  const contractPath = path.join(root, ".intent", "default.yaml");
+  const originalContract = await fs.readFile(contractPath, "utf8");
+  await vscode.commands.executeCommand("intentContract.createTemplate");
+  assert.equal(await fs.readFile(contractPath, "utf8"), originalContract, "Create Template must not overwrite an existing contract.");
+
   const statePath = path.join(root, ".intent", ".state.json");
   const violationsPath = path.join(root, ".intent", ".violations.md");
 
@@ -58,6 +63,11 @@ exports.run = async function runExtensionHostCoverage() {
   const orderLenses = await vscode.commands.executeCommand("vscode.executeCodeLensProvider", ordersUri);
   assert.ok(orderLenses.some((lens) => lens.command?.title.includes("Intent: In-Scope")), "An allowed source file should show its in-scope CodeLens.");
 
+  const diagramUri = vscode.Uri.file(path.join(root, "docs", "architecture.mmd"));
+  await vscode.workspace.openTextDocument(diagramUri);
+  const diagramLenses = await vscode.commands.executeCommand("vscode.executeCodeLensProvider", diagramUri);
+  assert.ok(diagramLenses.some((lens) => lens.command?.title.includes("Intent: Read-Only")), "A read-only policy file should show its read-only CodeLens.");
+
   const ignoredPath = path.join(root, "ignored.md");
   await fs.writeFile(ignoredPath, "This path is ignored by workspace settings.\n");
   await delay(400);
@@ -68,9 +78,11 @@ exports.run = async function runExtensionHostCoverage() {
   const notesPath = path.join(root, "notes.md");
   const notesUri = vscode.Uri.file(notesPath);
   await fs.writeFile(notesPath, "This file is outside the contract's modify scope.\n");
-  await waitFor("automatic detection of an out-of-scope file", () =>
-    vscode.languages.getDiagnostics(notesUri).length > 0
-  );
+  await waitFor("automatic detection of an out-of-scope file", async () => {
+    if (vscode.languages.getDiagnostics(notesUri).length === 0) return false;
+    const text = await fs.readFile(violationsPath, "utf8");
+    return /notes\.md/.test(text);
+  });
   const scopeDiagnostics = vscode.languages.getDiagnostics(notesUri);
   assert.ok(scopeDiagnostics.some((diagnostic) =>
     diagnostic.source === "Intent Contract" && diagnostic.severity === vscode.DiagnosticSeverity.Error
@@ -92,8 +104,25 @@ exports.run = async function runExtensionHostCoverage() {
   const notesLenses = await vscode.commands.executeCommand("vscode.executeCodeLensProvider", notesUri);
   assert.ok(notesLenses.some((lens) => lens.command?.title.includes("Out of Scope")), "An out-of-scope file should show its CodeLens status.");
 
+  const probe = `intent-contract-clipboard-probe-${Date.now()}`;
+  await vscode.env.clipboard.writeText(probe);
+  const clipboardAvailable = (await vscode.env.clipboard.readText()) === probe;
   await vscode.commands.executeCommand("intentContract.copyViolations");
-  assert.match(await vscode.env.clipboard.readText(), /notes\.md/, "Copy Violations should put actionable findings on the clipboard.");
+  if (clipboardAvailable) {
+    assert.match(await vscode.env.clipboard.readText(), /notes\.md/, "Copy Violations should put actionable findings on the clipboard.");
+  } else {
+    console.log("NOTE: skipping clipboard content assertion because host clipboard I/O returned empty in this desktop session.");
+  }
+
+  await vscode.commands.executeCommand("intentContract.openDiff", {
+    id: String(scopeDiagnostics[0].code ?? "scope-notes"),
+    detector: "scope",
+    file: "notes.md",
+    severity: "error",
+    message: scopeDiagnostics[0].message,
+    evidence: "notes.md"
+  });
+  await vscode.commands.executeCommand("workbench.action.closeActiveEditor");
 
   await vscode.commands.executeCommand("intentContract.exportReport");
   const reportDirectory = path.join(root, ".intent", "reports");
@@ -106,9 +135,18 @@ exports.run = async function runExtensionHostCoverage() {
   const driftPath = path.join(root, ".intent", ".architecture-drift.mmd");
   assert.match(await fs.readFile(driftPath, "utf8"), /flowchart LR/, "Architecture export should write a renderable Mermaid diagram.");
 
-  await assertWebviewPanel("intentContract.openDashboard", "Intent Contract: Mission Control");
-  await assertWebviewPanel("intentContract.visualBuilder", "Intent Contract: Visual Builder");
-  await assertWebviewPanel("intentContract.visualizeArchitecture", "Intent Contract: Architecture Drift Inspector");
+  await assertWebviewPanel("intentContract.openDashboard", "Intent Contract: Mission Control", [
+    /intent-contract-extension-testbed/,
+    /notes\.md/
+  ]);
+  await assertWebviewPanel("intentContract.visualBuilder", "Intent Contract: Visual Builder", [
+    /docs\/architecture\.mmd/
+  ]);
+  await assertWebviewPanel("intentContract.visualizeArchitecture", "Intent Contract: Architecture Drift Inspector", [
+    /docs\/architecture\.mmd/,
+    /Orders/,
+    /Pricing/
+  ]);
 
   await vscode.commands.executeCommand(
     addFileAction.command.command,
@@ -167,9 +205,18 @@ exports.run = async function runExtensionHostCoverage() {
   );
 
   await vscode.commands.executeCommand("intentContract.markFileReadOnly", notesUri);
+  const readOnlyContract = await fs.readFile(contractPath, "utf8");
+  const modifySection = readOnlyContract.match(/modify:([\s\S]*?)read_only:/)?.[1] ?? "";
+  const readOnlySection = readOnlyContract.match(/read_only:([\s\S]*?)modify_symbols:/)?.[1] ?? "";
+  assert.match(readOnlySection, /notes\.md/, "Mark File Read-Only should add notes.md to scope.read_only.");
+  assert.doesNotMatch(modifySection, /notes\.md/, "Mark File Read-Only should remove notes.md from scope.modify.");
   assert.ok(vscode.languages.getDiagnostics(notesUri).some((diagnostic) =>
-    diagnostic.source === "Intent Contract" && diagnostic.severity === vscode.DiagnosticSeverity.Error
-  ), "Mark File Read-Only should synchronize policy and report the existing out-of-scope change.");
+    diagnostic.source === "Intent Contract" &&
+    diagnostic.severity === vscode.DiagnosticSeverity.Error &&
+    /read-only/i.test(diagnostic.message)
+  ), "Mark File Read-Only should synchronize policy and report a read-only violation.");
+  const readOnlyNotesLenses = await vscode.commands.executeCommand("vscode.executeCodeLensProvider", notesUri);
+  assert.ok(readOnlyNotesLenses.some((lens) => lens.command?.title.includes("Intent: Read-Only")), "After marking read-only, CodeLens should reflect Read-Only status.");
 
   await vscode.commands.executeCommand("intentContract.stop");
   assert.equal(await exists(statePath), false, "Stopping a session must remove persisted session state.");
@@ -181,7 +228,7 @@ exports.run = async function runExtensionHostCoverage() {
 async function waitFor(description, predicate) {
   const deadline = Date.now() + 10000;
   while (Date.now() < deadline) {
-    if (predicate()) return;
+    if (await predicate()) return;
     await delay(100);
   }
   assert.fail(`Timed out waiting for ${description}.`);
@@ -201,10 +248,13 @@ async function exists(filePath) {
   }
 }
 
-async function assertWebviewPanel(command, expectedTitle) {
+async function assertWebviewPanel(command, expectedTitle, expectedContentPatterns = []) {
   const instance = await vscode.commands.executeCommand(command);
   assert.ok(instance?.panel, `${command} should create a webview panel.`);
   assert.equal(instance.panel.title, expectedTitle, `${command} should open the expected panel.`);
   assert.ok(instance.panel.webview.html.length > 0, `${command} should render webview content.`);
+  for (const pattern of expectedContentPatterns) {
+    assert.match(instance.panel.webview.html, pattern, `${command} webview HTML should match ${pattern}.`);
+  }
   instance.panel.dispose();
 }

@@ -74,6 +74,9 @@ jobs:
       - name: Run black-box policy scenarios through the compiled CLI
         run: node scripts/run-policy-scenarios.mjs upstream-extension/dist/cli.js
 
+      - name: Run MCP server scenarios
+        run: node scripts/run-mcp-scenarios.mjs upstream-extension/dist/mcp-server.js
+
   extension-host:
     name: VS Code extension-host coverage and VSIX packaging
     runs-on: ubuntu-latest
